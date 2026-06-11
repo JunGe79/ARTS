@@ -1,8 +1,8 @@
-# Four Gotchas in the Fluent Bit → OpenSearch Stack
+# Five Gotchas in the Fluent Bit → OpenSearch Stack
 
 I run a log pipeline where Fluent Bit tails files on disk and ships them
 into OpenSearch (with OpenSearch Dashboards on top). The whole thing
-*works* — until it doesn't. Each of the four issues below cost me half
+*works* — until it doesn't. Each of the five issues below cost me half
 a day or more before I found the root cause, so I'm writing them down
 in case the next engineer is googling the same symptom.
 
@@ -185,6 +185,68 @@ growing without bound, one of the knobs is missing or misplaced.
 (Note: `storage.pause_on_chunks_overlimit` is a *per-input* setting.
 Putting it in `[SERVICE]` does nothing — Fluent Bit silently ignores
 it. Easy mistake.)
+
+---
+
+## 5. Fluent Bit will quietly cap out at 1024 open file descriptors
+
+By default a Linux process gets `RLIMIT_NOFILE = 1024`. Fluent Bit's
+`tail` input keeps one open file descriptor per matched file, plus a
+handful for its own SQLite DB, sockets, and internal buffers. So once
+your `Path` glob matches around 950 files, the next inotify-add tries
+to open a new fd, fails with `EMFILE`, and the file is silently never
+tailed. The `fluent-bit.log` shows zero errors at the default
+verbosity.
+
+Two ways to fix this. We picked the second.
+
+**Option A: raise the limit.** Add `ulimit -n 65536` to the
+container's entrypoint (or `LimitNOFILE=65536` in the systemd unit
+file). Works, but you're treating the symptom — Fluent Bit will tail
+65535 files now, which is *more* memory + CPU pressure per inotify
+event, not less.
+
+**Option B: bound the working set.** Don't put all your files in the
+tailed directory at once. Stage them somewhere fluent-bit doesn't
+watch, batch them, and atomically move each batch into the watched
+directory just before it's ready to read. Fluent Bit only ever sees a
+bounded number of files — in our case, one batch of 200 at a time —
+which sits comfortably under 1024.
+
+Concretely, the on-disk layout looks like:
+
+```
+/opensearch_staging/       <-- fluent-bit does NOT watch this dir
+    a/                     <-- copy raw logs here
+    b/                     <-- pre-process JSON-encodes them in place
+    c/
+
+/opensearch_target/        <-- fluent-bit's Path glob points here
+    a/                     <-- os.rename'd in from staging
+    b/                     <-- atomic on same FS = no half-written files
+    c/
+```
+
+The processor copies → pre-processes → `os.rename`s each file into
+target. Same-filesystem rename is atomic, so Fluent Bit's first
+inotify event for a file is for a fully-finished file — no half-parsed
+JSON. Once a batch is drained downstream into OpenSearch, the target
+dir is wiped before the next batch lands.
+
+Side benefits this happens to give you:
+
+- Pre-processing failures stay in staging and never confuse the tail
+  input.
+- A crashed pre-processor is recoverable: just wipe staging and
+  restart from the source. Nothing leaked through to the index.
+- The `Read_from_Head true` semantics make sense again — every file
+  in the target dir is fresh, so reading from the head is exactly
+  what you want.
+
+If you're tempted to skip this and just raise the ulimit: do whichever
+fits your environment, but remember that 1024 was the symptom, not
+the disease. The disease is "one file = one open fd, and you have
+unbounded files." Capping the working set fixes both.
 
 ---
 
