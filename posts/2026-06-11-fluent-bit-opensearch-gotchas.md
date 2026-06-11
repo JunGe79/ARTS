@@ -1,8 +1,8 @@
-# Three Gotchas in the Fluent Bit → OpenSearch Stack
+# Four Gotchas in the Fluent Bit → OpenSearch Stack
 
 I run a log pipeline where Fluent Bit tails files on disk and ships them
 into OpenSearch (with OpenSearch Dashboards on top). The whole thing
-*works* — until it doesn't. Each of the three issues below cost me half
+*works* — until it doesn't. Each of the four issues below cost me half
 a day or more before I found the root cause, so I'm writing them down
 in case the next engineer is googling the same symptom.
 
@@ -122,6 +122,69 @@ Two naming traps to know about for OpenSearch Dashboards 3.x:
 
 - The Kibana / OSD 2.x key was `data.autocomplete.valueSuggestions.terminateAfter`. OSD 3.x **rejects this on startup** ("definition for this key is missing") and refuses to boot.
 - The value must be a **plain integer**. `10000000ms` is rejected with "must be a number." No unit suffix.
+
+---
+
+## 4. Fluent Bit's filesystem buffer can eat your disk and break OpenSearch
+
+The pipeline ran fine for weeks, then one day a saved-objects import
+into OpenSearch Dashboards silently dropped half its records. Some of
+my dashboards came back empty. There was no error in the OSD logs.
+
+What had happened, in order:
+
+1. A burst of incoming files generated more events than the OpenSearch
+   `[OUTPUT]` could index.
+2. Fluent Bit started spilling chunks to its filesystem buffer at
+   `/tmp/fluentbit-storage`. There was no cap, so it kept spilling.
+3. The buffer reached **34 GB on a 50 GB container overlay**, tripping
+   the OpenSearch flood-stage watermark (default 95% full).
+4. OpenSearch flipped `.kibana_1` to read-only as a self-protection
+   measure.
+5. The saved-objects import was running at exactly the wrong moment.
+   The writes silently failed, the importer reported success anyway,
+   and I was left with a half-populated dashboard set.
+
+Three knobs together fix this:
+
+```ini
+[INPUT]
+    Name tail
+    ...
+    # Pause the tail input when in-memory chunks fill, instead of
+    # spilling to disk without limit.
+    storage.type                      filesystem
+    storage.pause_on_chunks_overlimit on
+    # Bound per-input memory; reduces downstream index pressure.
+    Mem_Buf_Limit                     64MB
+
+[OUTPUT]
+    Name es
+    ...
+    # Hard cap on the filesystem-buffered queue for THIS output.
+    # When the cap is hit, oldest chunks are dropped rather than
+    # the disk filling up.
+    storage.total_limit_size 4G
+    # One worker is gentler on smaller OpenSearch clusters --
+    # otherwise you'll see HTTP 429s pile up under load.
+    Workers 1
+```
+
+The first two stop unbounded spill at the source. The third puts a hard
+ceiling on what the output queue can hold. Together they trade "no
+data loss ever" for "the system stays alive under backpressure," which
+is the right trade for an observability pipeline — a dashboard with a
+gap in it is much better than no dashboard at all.
+
+**Confirm it's working:** under sustained load, check
+`/tmp/fluentbit-storage`. If the directory hovers below 4 GB and Fluent
+Bit's log shows occasional `pause` / `resume` messages on the input,
+backpressure is being applied at the right layer. If the directory is
+growing without bound, one of the knobs is missing or misplaced.
+
+(Note: `storage.pause_on_chunks_overlimit` is a *per-input* setting.
+Putting it in `[SERVICE]` does nothing — Fluent Bit silently ignores
+it. Easy mistake.)
 
 ---
 
