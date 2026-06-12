@@ -1,4 +1,4 @@
-# Five Gotchas in the Fluent Bit → OpenSearch Stack
+# Four Gotchas in the Fluent Bit → OpenSearch Stack
 
 Real-world traps I hit running a log pipeline of Fluent Bit shipping
 into OpenSearch + OpenSearch Dashboards. Each one cost me hours
@@ -24,26 +24,7 @@ one line per file actually being watched.
 
 ---
 
-## 2. OpenSearch Dashboards caches the field list per index pattern
-
-Each index pattern in `.kibana_<N>` stores a JSON-serialized field
-cache. It is **never auto-updated** when the underlying mapping
-changes. Every dropdown (Discover filter editor, Visualize field
-picker, etc.) reads the cache, not the live `_field_caps`.
-
-**Fix:** Stack Management → Index Patterns → click the refresh-field-list
-icon. Or via API:
-```bash
-POST /api/index_patterns/index_pattern/<saved-id>/_refresh_fields
-```
-
-**Trap:** snapshots and `export.ndjson` carry the cached `fields`
-forward. Patch the cache string surgically rather than re-exporting,
-or fresh installs land with stale dropdowns.
-
----
-
-## 3. Filter autocomplete silently misses rare values
+## 2. Filter autocomplete silently misses rare values
 
 The autocomplete endpoint runs a `terms` aggregation with
 `terminate_after: 100000` — only the **first 100k docs per shard** are
@@ -57,7 +38,7 @@ opensearchDashboards.autocompleteTerminateAfter: 10000000
 
 ---
 
-## 4. Fluent Bit's filesystem buffer can eat your disk
+## 3. Fluent Bit's filesystem buffer can eat your disk
 
 When OpenSearch can't keep up with the rate of incoming logs, Fluent
 Bit saves the overflow to disk at `/tmp/fluentbit-storage` so nothing
@@ -85,7 +66,7 @@ enough to queue >4 GB.
 
 ---
 
-## 5. Fluent Bit caps out at 1024 open file descriptors
+## 4. Fluent Bit caps out at 1024 open file descriptors
 
 Default `RLIMIT_NOFILE = 1024`. Fluent Bit tail keeps one fd per
 matched file. Once your glob matches ~950 files, new inotify-adds get
