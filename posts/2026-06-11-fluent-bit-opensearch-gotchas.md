@@ -90,8 +90,6 @@ Trade-off: `storage.total_limit_size` drops oldest chunks once
 exceeded. Data loss only kicks in if OpenSearch is unhealthy long
 enough to queue >4 GB.
 
-**Placement trap:** `storage.pause_on_chunks_overlimit` is
-**per-input**; in `[SERVICE]` it is silently ignored.
 
 ---
 
