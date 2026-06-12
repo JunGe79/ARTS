@@ -50,18 +50,10 @@ The autocomplete endpoint runs a `terms` aggregation with
 scanned. A value that lives past that window is invisible to the
 dropdown even though it's in the index.
 
-**Smoking gun:** empty query returns top 10 by doc_count; specific
-prefix returns `[]`; direct cluster query without `terminate_after`
-finds it.
-
 **Fix** in `opensearch_dashboards.yml`:
 ```yaml
 opensearchDashboards.autocompleteTerminateAfter: 10000000
 ```
-
-OSD 3.x **rejects** the Kibana / OSD 2.x key
-(`data.autocomplete.valueSuggestions.terminateAfter`) at startup.
-Value must be a plain integer — no unit suffix.
 
 ---
 
