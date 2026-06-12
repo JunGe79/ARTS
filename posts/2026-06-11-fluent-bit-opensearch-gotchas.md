@@ -67,10 +67,16 @@ Value must be a plain integer — no unit suffix.
 
 ## 4. Fluent Bit's filesystem buffer can eat your disk
 
-Under sustained backpressure, Fluent Bit spills chunks to
-`/tmp/fluentbit-storage`. With no cap, it can fill the container
-overlay, trip OpenSearch flood-stage, and flip `.kibana_1` read-only
-mid-import — silently breaking writes that "succeed."
+When OpenSearch can't keep up with the rate of incoming logs, Fluent
+Bit saves the overflow to disk at `/tmp/fluentbit-storage` so nothing is
+lost. The default has no size limit. If the backlog persists, that
+directory keeps growing until it fills the container's disk. Once the
+disk is almost full, OpenSearch trips a safety switch and turns every
+index read-only — including `.kibana_1`, the index OpenSearch
+Dashboards uses to store its saved objects. A dashboard import running
+at that moment keeps reporting success (HTTP 200), because OpenSearch
+is accepting the requests, but the writes are silently rejected. You
+end up with a half-populated dashboard set and no error in the logs.
 
 **Fix:**
 ```ini
