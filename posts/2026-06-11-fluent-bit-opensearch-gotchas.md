@@ -102,7 +102,9 @@ matched file. Once your glob matches ~950 files, new inotify-adds get
 **Two fixes:**
 
 - **Raise the limit** — `ulimit -n 65536` in entrypoint, or
-  `LimitNOFILE=` in the systemd unit. Treats the symptom.
+  `LimitNOFILE=` in the systemd unit. Treats the symptom. **Doesn't
+  work on Azure Container Instances** — ACI ignores entrypoint
+  `ulimit` and there's no systemd, so you're locked into option 2.
 - **Bound the working set** — stage files in a directory Fluent Bit
   doesn't watch, then `os.rename` each batch (atomic on same FS) into
   the watched dir. Fluent Bit only ever sees one batch worth of files.
