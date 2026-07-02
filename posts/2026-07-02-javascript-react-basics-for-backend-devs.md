@@ -31,9 +31,24 @@ Why it also matters (not just speed): every render, `[1, 2]` makes a **brand-new
 The `[a, b]` list should include every value the function uses. Forget one and you get an old (stale) result.
 
 ## async / await
-A slow call returns a **Promise** (an IOU). `await` pauses **this function** until it resolves (page doesn't freeze); only allowed inside `async`. An `async` function always returns a Promise.
+A slow call (like asking a server) returns a **Promise** — an IOU for a value that isn't ready yet. `await` pauses **this function** until the Promise is done (the page keeps working). `await` only works inside a function marked `async`, and an `async` function always returns a Promise.
 
-**Does the next line wait?** Inside the same function after `await` — yes. In the *caller* — no; calling an async function returns a Promise immediately and moves on. Only whoever `await`s/`​.then()`s it sees the value.
+```js
+async function greet() {
+  console.log("asking the server...");
+  const user = await getUser();      // pause here until the reply comes back
+  console.log("hello", user.name);   // runs only after the reply
+}
+```
+
+**Does the next line wait?** Inside the same function, after `await` — yes. But the *caller* does not wait:
+
+```js
+greet();                    // starts it and gets a Promise back right away
+console.log("I run now");   // prints immediately, without waiting for greet
+```
+
+Only code that `await`s or `.then()`s the Promise actually sees the value.
 
 ## Promise.all().flat()
 ```js
