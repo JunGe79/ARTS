@@ -5,7 +5,21 @@
 **Answer:** A quick plain-English cheat sheet — the basics that trip up people coming from other languages.
 
 ## styled.div
-`styled-components`. `styled.div\`css\`` makes a React component that renders a `<div>` with that CSS attached. Use `<Panel>` instead of `<div className="panel">`. No logic, just style.
+`styled-components`. `styled.div\`css\`` makes a React component that renders a `<div>` with that CSS attached. No logic, just style.
+```js
+import styled from "styled-components";
+
+const Panel = styled.div`
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+`;
+
+function Card() {
+  return <Panel>Hello</Panel>;   // renders a <div> with that CSS + "Hello"
+}
+```
+Use `<Panel>` instead of `<div className="panel">`.
 
 ## useMemo
 Caches a computed value; recomputes only when its dependency list changes.
