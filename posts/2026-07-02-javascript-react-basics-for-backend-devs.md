@@ -5,7 +5,7 @@
 **Answer:** A quick plain-English cheat sheet — the basics that trip up people coming from other languages.
 
 ## styled.div
-`styled-components`. `styled.div\`css\`` makes a React component that renders a `<div>` with that CSS attached. No logic, just style.
+`styled-components` is a library that lets you write CSS right on a component. You give `styled.div` some CSS, and it gives you back a ready-to-use React component that renders a `<div>` with that CSS built in. No logic — just a reusable styled box.
 ```js
 import styled from "styled-components";
 
