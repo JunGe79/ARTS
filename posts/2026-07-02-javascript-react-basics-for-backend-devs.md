@@ -26,7 +26,9 @@ Caches a computed value; recomputes only when its dependency list changes.
 ```js
 const v = useMemo(() => build(a, b), [a, b]);
 ```
-Bonus: `[1,2]` is a *new* array every render. React children compare by reference ("same object?"), so a fresh array looks "changed" and triggers re-renders/resets. `useMemo` keeps the **same** reference until inputs change. The `[a, b]` list = "everything the function reads"; miss one → stale value.
+Why it also matters (not just speed): every render, `[1, 2]` makes a **brand-new array** — same contents, but a different object. React often checks "did this change?" by asking "is it the same object?", not "are the contents equal?" So a fresh array each render looks "new" and can make a child component re-render or reset. `useMemo` hands back the **same** array until the inputs change.
+
+The `[a, b]` list should include every value the function uses. Forget one and you get an old (stale) result.
 
 ## async / await
 A slow call returns a **Promise** (an IOU). `await` pauses **this function** until it resolves (page doesn't freeze); only allowed inside `async`. An `async` function always returns a Promise.
