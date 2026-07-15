@@ -112,33 +112,3 @@ No plaintext endpoint means no insecure cookie to leak and nothing to replay a
 stolen cookie against. (If real clients still use `http://`, redirect port 80 to
 443 instead of closing it — but check first; a bare `redirectPort` won't do that
 on its own.)
-
-## Gotchas that cost me time
-
-- **`redirectPort` is not a redirect.** It only kicks in under a `CONFIDENTIAL`
-  transport-guarantee. On its own, port 80 serves content.
-- **Same-box, two findings.** A CNAME meant "two" scanner entries were one
-  machine. Resolve names before you go chasing two servers.
-- **Edit XML as UTF-8 with no BOM.** Writing the file back with a BOM can upset
-  parsers. In PowerShell: `[IO.File]::WriteAllText($p,$s,(New-Object
-  Text.UTF8Encoding($false)))`.
-- **RDP paste silently mangles long PowerShell lines.** A wrapped
-  `$(Get-Date -f 'yyyy-MM-dd')` or a trailing `# comment` becomes a broken
-  statement, yet a later validation can still print "OK". After any scripted
-  edit, diff against a backup (`Compare-Object`) to prove only the intended
-  lines changed.
-- **Config can regress on app upgrades.** If the platform regenerates
-  `server.xml`/`web.xml`, port 80 or the cookie flag can come back. Note it so
-  it gets re-applied.
-
-## Takeaways
-
-- Missing-`Secure`-on-`JSESSIONID` almost always means the app answers on plain
-  HTTP; Tomcat only marks the cookie `Secure` over TLS.
-- `<secure>true</secure>` in `web.xml` is the one-line finding-closer. It's real
-  protection for browsers, but it is **not** server-side access control.
-- The durable fix is to not serve the app over plaintext — close port 80 or make
-  it a real redirect to 443 (and add HSTS).
-- Use a clean sibling node as your reference for "what compliant looks like."
-- Diff every scripted config edit against a backup; "it validated" is not "it did
-  what I meant."
