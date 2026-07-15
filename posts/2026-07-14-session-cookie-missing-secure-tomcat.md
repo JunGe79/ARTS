@@ -77,13 +77,6 @@ was serving real content, **not** redirecting.
 Restart Tomcat, and the HTTP response now carries `JSESSIONID=...; Secure;
 HttpOnly`. The scanner is happy.
 
-**Schema trap that will fail startup:** the flags must be **inside**
-`<cookie-config>`, and inside `<session-config>` the order is fixed —
-`<session-timeout>` first, then `<cookie-config>`. Putting `<secure>` directly
-under `<session-config>` is invalid and Tomcat refuses to start. Validate before
-you bounce the service (`[xml](Get-Content web.xml)` in PowerShell just checks
-well-formedness; element order still has to be right for the servlet schema).
-
 ## Why `Secure` alone is not the real fix
 
 `Secure` is enforced by the **client**, not the server. A browser won't send a
