@@ -43,3 +43,7 @@ To check a login later: read the user's salt, run the exact same PBKDF2 on the p
 ### One subtle detail that trips people up
 
 The salt is stored as a 64-character **hex string**. When it's fed into PBKDF2, many implementations use the **literal characters of that string** (64 ASCII bytes), *not* the 32 raw bytes you'd get by decoding the hex. If you reproduce the hash and decode the salt "helpfully" back to bytes first, you'll get a different, wrong answer. Feed the salt in exactly as it's stored — as text.
+
+## Transport encryption vs. the hash
+
+Don't confuse the login transport encryption with the hash. When a user logs in, the client (or web server) wraps the typed password in a reversible cipher for transit. Server-side, the validation code decrypts it back to the plaintext and only then runs PBKDF2. So the value that actually goes through PBKDF2 is always the raw plaintext password — the reversible transport layer is transparent and doesn't affect the hash.
