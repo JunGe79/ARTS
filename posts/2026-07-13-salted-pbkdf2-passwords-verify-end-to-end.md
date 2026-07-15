@@ -47,3 +47,18 @@ The salt is stored as a 64-character **hex string**. When it's fed into PBKDF2, 
 ## Transport encryption vs. the hash
 
 Don't confuse the login transport encryption with the hash. When a user logs in, the client (or web server) wraps the typed password in a reversible cipher for transit. Server-side, the validation code decrypts it back to the plaintext and only then runs PBKDF2. So the value that actually goes through PBKDF2 is always the raw plaintext password — the reversible transport layer is transparent and doesn't affect the hash.
+
+## One-liner: compute the hash and emit the SQL
+
+To do it in a single step, compute the hash and print a ready `UPDATE`:
+
+```bash
+python3 -c "
+import hashlib
+salt='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'  # the 64-hex salt from the user's row
+h='7'+hashlib.pbkdf2_hmac('sha256', b'MyNewPassw0rd!', salt.encode('ascii'), 1000, 32).hex()
+print(f\"UPDATE Users SET password='{h}', datePasswordSet=DATEDIFF(second,'1970-01-01',GETUTCDATE()) WHERE id=42;\")
+"
+```
+
+Swap in the target row's real salt, the new password, and the user id.
