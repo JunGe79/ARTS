@@ -79,19 +79,6 @@ It does **two jobs at once**, which is the thing to notice:
 
 Job 2 is the interesting one.
 
-## The problem this solves
-
-The obvious way to write job 2 is: read the two numbers, decide the colour, paint the icon. Once. That is what I did first, and it was subtly broken.
-
-A tile's snippet is re-run by the tool **only when that tile's own value changes**. My tile's own value is the "Failed" count, which is nearly always `0`. So:
-
-- Page loads with 9 idle -> snippet runs -> icon painted **amber**. Correct.
-- I change a filter; idle drops to 0, failed stays 0.
-- My tile's own value did not change (still 0), so **the snippet never re-runs**.
-- The icon stays **amber**. Wrong - and it only corrects on a full page reload, because a reload re-runs everything.
-
-So the icon cannot be a one-shot calculation inside a tile that does not reliably re-run.
-
 ## The fix, in one idea
 
 **Do not compute the icon from the data. Read the numbers that are already painted on the screen, on a timer.**
