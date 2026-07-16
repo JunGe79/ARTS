@@ -13,6 +13,53 @@ A tile's content can be one of two things:
 
 That is the only reason the tile can react to filters and time ranges. It re-runs and rebuilds its HTML each time the data changes. Inside the snippet you are handed the tile's data in a variable called `rows`.
 
+## The whole tile
+
+Here is the complete thing we are about to read. It is 20-odd lines. Do not worry about it yet - the rest of the post takes it apart one line at a time.
+
+```js
+:=
+var rs = [];
+if (rows) {
+  for (var k in rows) {
+    if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
+  }
+}
+rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
+
+function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
+
+if (!rs.length) {
+  return '<div style="padding:10px;color:#888;">No Auto Scale jobs in this time range</div>';
+}
+
+var h = '<div style="padding:4px 2px;">';
+for (var i = 0; i < rs.length; i++) {
+  var r = rs[i];
+  h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #eee;">'
+     + '<svg style="fill:#0078d4;width:20px;height:20px;flex:0 0 auto;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14a6 6 0 0 0 6 6h13a5 5 0 0 0 5-5c0-2.64-2.05-4.78-4.65-4.96z"/></svg>'
+     + '<div style="flex:1 1 auto;min-width:0;">'
+     + '<div style="font-weight:600;font-size:13px;">' + r.Vendor + '</div>'
+     + '<div style="font-size:12px;color:#666;">'
+     + n(r.Tenants, 'tenant', 'tenants') + ', '
+     + n(r.Clients, 'client', 'clients') + ', '
+     + n(r.Jobs, 'job', 'jobs')
+     + '</div></div></div>';
+}
+return h + '</div>';
+```
+
+What it draws, one row per vendor:
+
+```
+[cloud icon]  AWS
+              3 tenants, 10 clients, 55 jobs
+[cloud icon]  Azure
+              1 tenant, 2 clients, 8 jobs
+```
+
+Read it as five moves: **make a list -> sort it -> define a grammar helper -> bail out if empty -> glue one HTML row per item and hand it back.** Everything else is styling noise.
+
 ## The big gotcha: the data is not a list
 
 You would expect `rows` to be a normal list. It is not. It arrives like a **numbered filing cabinet**:
