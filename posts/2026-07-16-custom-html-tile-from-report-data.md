@@ -1,8 +1,8 @@
-# When a dashboard tile will not re-run: watch the screen instead
+# How to refresh one dashboard tile without reloading the page
 
-**Question:** My dashboard has a small status icon: amber if something is wrong, green if all is fine. It is correct when the page loads. But when I change a filter, the icon does not change. Only a full page refresh fixes it. Why?
+**Question:** I change a filter, and one tile on my dashboard does not update. Only a full page refresh fixes it. How do I refresh just that tile, without reloading the page?
 
-**Answer:** My tile **only re-runs when its own number changes**. That number was almost always 0. So when the filter moved a *different* number, my tile never ran again, and the icon kept its old colour. The fix: stop working out the icon once. Instead run a small timer that reads the numbers **already on the screen** every second, and repaints the icon when they change.
+**Answer:** Run a small timer. Every second it reads what is already on the screen and repaints that tile if anything changed. You need this because a tile only re-runs when its **own** number changes - so anything it draws from another tile stays stale until a reload.
 
 ## First: what `:=` means
 
