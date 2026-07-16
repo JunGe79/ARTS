@@ -1,267 +1,305 @@
-# Reading a report tile's JavaScript, line by line
+# When a dashboard tile will not re-run: watch the screen instead
 
-**Question:** My reporting tool lets a dashboard tile return raw HTML from a small JavaScript snippet. I am not a JavaScript person. Someone handed me a 20-line tile that draws "AWS - 3 tenants, 10 clients, 55 jobs" and I cannot read it. What does each line actually do?
+**Question:** My reporting tool lets a dashboard tile return HTML from a small JavaScript snippet. My tile shows a "Failed" count, and it also paints a status icon (amber or green) next to a panel heading somewhere else on the page. The icon is right when the page loads, but if I change a filter it goes stale - it only fixes itself if I refresh the whole page. Why, and how do I fix it without a refresh?
 
-**Answer:** The whole thing is a tiny recipe: **take the data, turn it into a list, sort it, then glue together a long piece of HTML text and hand it back.** The tool paints whatever text you hand back. Below is every line in plain words, plus samples you can run.
+**Answer:** Because a tile's snippet **only re-runs when that tile's own number changes**. My "Failed" count was almost always 0, so when a filter changed and only the *other* number moved, my tile never re-ran and the icon kept its old colour. The fix is to stop computing the icon once, and instead install a small **watcher** that reads the numbers already on screen every second and repaints the icon when they change.
 
 ## First: what `:=` means
 
-A tile's content can be one of two things:
-
-- **Fixed text** - always shows the same thing.
-- **A `:=` snippet** - the leading `:=` tells the tool: *"this is not fixed text. Run it as a program and show whatever it gives back."*
-
-That is the only reason the tile can react to filters and time ranges. It re-runs and rebuilds its HTML each time the data changes. Inside the snippet you are handed the tile's data in a variable called `rows`.
+A tile's content is either **fixed text** or a **`:=` snippet**. The leading `:=` tells the tool: *"this is not fixed text - run it as a program and show whatever it hands back."* Inside, you get the tile's data in a variable called `rows`.
 
 ## The whole tile
 
-Here is the complete thing we are about to read. It is 20-odd lines. Do not worry about it yet - the rest of the post takes it apart one line at a time.
+Here it is. Names are made generic, but the shape is real. Do not worry about it yet - we take it apart below.
 
 ```js
 :=
-var rs = [];
-if (rows) {
-  for (var k in rows) {
-    if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
+var value = 0;
+if (rows && rows[0] && rows[0]['Failed']) { value = rows[0]['Failed']; }
+
+(function () {
+  if (window.__iconInit) { return; }      // only ever set this up once
+  window.__iconInit = true;
+
+  var W = '<svg width="18" height="18" viewBox="0 0 50 50"><polygon fill="#FFC219" points="25 0 0 50 50 50"/></svg>';  // amber
+  var K = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#4caf50"/></svg>';      // green
+
+  function state() {
+    var idle = 0, failed = 0, ns = document.querySelectorAll('.dash-status-number');
+    for (var i = 0; i < ns.length; i++) {
+      var l = ns[i].parentElement.querySelector('.dash-event-status');
+      if (!l) { continue; }
+      var t = l.textContent.trim().toUpperCase();
+      var v = parseInt((ns[i].textContent || '').trim(), 10) || 0;
+      if (t === 'IDLE') { idle = v; } else if (t === 'FAILED') { failed = v; }
+    }
+    return (idle > 0 || failed > 0) ? 'a' : 'g';
   }
-}
-rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
 
-function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
+  function title() {
+    var all = document.querySelectorAll('*'), best = null;
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      if (n.textContent.trim().toLowerCase() !== 'needs attention') { continue; }
+      if (best === null || n.getElementsByTagName('*').length < best.getElementsByTagName('*').length) { best = n; }
+    }
+    return best;
+  }
 
-if (!rs.length) {
-  return '<div style="padding:10px;color:#888;">No jobs in this time range</div>';
-}
+  function upd() {
+    var t = title(); if (!t) { return; }
+    var st = state();
+    var ex = t.querySelector('.status-icon');
+    if (!ex) {
+      ex = document.createElement('span');
+      ex.className = 'status-icon';
+      ex.style.marginRight = '8px';
+      t.insertBefore(ex, t.firstChild);
+      ex.__st = '';
+    }
+    if (ex.__st !== st) { ex.innerHTML = (st === 'a') ? W : K; ex.__st = st; }
+  }
 
-var h = '<div style="padding:4px 2px;">';
-for (var i = 0; i < rs.length; i++) {
-  var r = rs[i];
-  h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #eee;">'
-     + '<svg style="fill:#0078d4;width:20px;height:20px;flex:0 0 auto;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14a6 6 0 0 0 6 6h13a5 5 0 0 0 5-5c0-2.64-2.05-4.78-4.65-4.96z"/></svg>'
-     + '<div style="flex:1 1 auto;min-width:0;">'
-     + '<div style="font-weight:600;font-size:13px;">' + r.Vendor + '</div>'
-     + '<div style="font-size:12px;color:#666;">'
-     + n(r.Tenants, 'tenant', 'tenants') + ', '
-     + n(r.Clients, 'client', 'clients') + ', '
-     + n(r.Jobs, 'job', 'jobs')
-     + '</div></div></div>';
-}
-return h + '</div>';
+  setTimeout(upd, 200);
+  setInterval(upd, 1000);
+})();
+
+return '<div style="display:flex;align-items:flex-start;padding:6px 4px;">'
+     + '<div style="margin-right:10px;"><svg width="34" height="34"><rect width="34" height="34" fill="#f44336"/></svg></div>'
+     + '<div>'
+     +   '<div class="dash-status-number" style="font-size:22px;font-weight:600;">' + value + '</div>'
+     +   '<div><span class="dash-event-status">FAILED</span></div>'
+     + '</div></div>';
 ```
 
-What it draws, one row per vendor:
+It does **two jobs at once**, which is the thing to notice:
 
-```
-[cloud icon]  AWS
-              3 tenants, 10 clients, 55 jobs
-[cloud icon]  Azure
-              1 tenant, 2 clients, 8 jobs
-```
+1. It draws **its own tile** - a red icon, a big number, and the label `FAILED` (that is the `return` at the bottom).
+2. It also keeps an icon next to a **different** heading ("Needs attention") in sync - amber if anything is wrong, green if not.
 
-Read it as five moves: **make a list -> sort it -> define a grammar helper -> bail out if empty -> glue one HTML row per item and hand it back.** Everything else is styling noise.
+Job 2 is the interesting one.
 
-## The big gotcha: the data is not a list
+## The problem this solves
 
-You would expect `rows` to be a normal list. It is not. It arrives like a **numbered filing cabinet**:
+The obvious way to write job 2 is: read the two numbers, decide the colour, paint the icon. Once. That is what I did first, and it was subtly broken.
 
-```js
-rows = { "0": {...}, "1": {...}, "2": {...} };
-```
+A tile's snippet is re-run by the tool **only when that tile's own value changes**. My tile's own value is the "Failed" count, which is nearly always `0`. So:
 
-It has drawers labelled `"0"`, `"1"`, `"2"` - but it is not a list. That means:
+- Page loads with 9 idle -> snippet runs -> icon painted **amber**. Correct.
+- I change a filter; idle drops to 0, failed stays 0.
+- My tile's own value did not change (still 0), so **the snippet never re-runs**.
+- The icon stays **amber**. Wrong - and it only corrects on a full page reload, because a reload re-runs everything.
 
-- `rows.length` gives **nothing** (undefined)
-- `rows.sort(...)` **does not exist** and will error
+So the icon cannot be a one-shot calculation inside a tile that does not reliably re-run.
 
-So the first job is always: open each drawer and copy the contents into a real list.
+## The fix, in one idea
+
+**Do not compute the icon from the data. Read the numbers that are already painted on the screen, on a timer.**
+
+That decouples the icon from whether any particular tile re-ran. When a filter changes, the numbers on screen change, and the watcher notices within a second and repaints.
 
 ## Line by line
 
 ```js
-var rs = [];
+var value = 0;
+if (rows && rows[0] && rows[0]['Failed']) { value = rows[0]['Failed']; }
 ```
-Make an empty **list** called `rs`. `[]` means "empty list".
+Get this tile's own number. `rows[0]` is the first row of data; `['Failed']` is the column. The `&&` chain means *"only if all of these exist"* - it avoids an error when there is no data. If anything is missing, `value` stays `0`.
 
 ```js
-if (rows) {
+(function () { ... })();
 ```
-"If we actually got data." A safety check, in case `rows` is missing.
+This is an **immediately-run function**. Wrapping code in `(function(){ ... })()` runs it right now, once, and keeps its variables private. Nothing else on the page can trip over names like `W` or `state`.
 
 ```js
-  for (var k in rows) {
+  if (window.__iconInit) { return; }
+  window.__iconInit = true;
 ```
-Go through each **key** in the cabinet. `k` holds one key at a time: first `"0"`, then `"1"`, and so on.
+The **run-once guard**. `window` is the page's global scratchpad. The first time through, `window.__iconInit` is undefined, so we skip the `return`, set the flag, and carry on. Every later run sees the flag and **exits immediately**. Without this, every re-run would start *another* timer and you would end up with a pile of them all fighting.
 
 ```js
-    if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
+  var W = '<svg ...amber triangle.../>';
+  var K = '<svg ...green circle.../>';
 ```
-"Is this drawer really one of `rows`' own?" (skips inherited junk). If yes: `rows[k]` is what is inside that drawer, and `.push(...)` **adds it to the end** of our list.
-
-After this, `rs` is a normal list and we can sort and loop it.
+The two icons, stored as plain text. `W` = warning, `K` = OK.
 
 ```js
-rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
+  function state() {
+    var idle = 0, failed = 0, ns = document.querySelectorAll('.dash-status-number');
 ```
-**Sort** the list. The little function compares two items, `a` and `b`. Returning `b - a` means **biggest first**. `b.Jobs || 0` reads as *"use `b.Jobs`, but if it is missing use 0"* - without that, a missing number breaks the maths and the order goes random.
+`document.querySelectorAll('.dash-status-number')` = *"find every element on the page with this CSS class"* - these are the big numbers on the dashboard. `ns` is the collection of them.
 
 ```js
-function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
+    for (var i = 0; i < ns.length; i++) {
+      var l = ns[i].parentElement.querySelector('.dash-event-status');
+      if (!l) { continue; }
 ```
-A small **grammar helper**. It takes a number and two words:
-
-- `v = v || 0` - if the number is missing, treat it as 0.
-- `v === 1 ? one : many` - this is a shorthand for "if / else". It reads: *if `v` is exactly 1, use the singular word, otherwise use the plural.*
-
-So `n(1,'job','jobs')` gives `"1 job"`, and `n(5,'job','jobs')` gives `"5 jobs"`. Without it you print "1 jobs", which looks broken.
+For each number, look **next to it** for its label. `parentElement` is the box holding both. `continue` means *"skip this one and move to the next"* - a number with no label is not one of ours.
 
 ```js
-if (!rs.length) {
-  return '<div style="padding:10px;color:#888;">No jobs in this time range</div>';
-}
+      var t = l.textContent.trim().toUpperCase();
+      var v = parseInt((ns[i].textContent || '').trim(), 10) || 0;
 ```
-`.length` is how many items are in the list. `!` means **not**. So: *"if the list is empty"* - hand back a grey message and **stop right here**. `return` exits immediately; nothing below runs.
+`textContent` = the visible text. `.trim()` strips spaces. `.toUpperCase()` makes the label comparison case-proof. `parseInt(x, 10)` turns the text `"9"` into the number `9` (the `10` just means "normal base-10 counting"). The `|| 0` at the end means *"if that failed, use 0"*.
 
 ```js
-var h = '<div style="padding:4px 2px;">';
+      if (t === 'IDLE') { idle = v; } else if (t === 'FAILED') { failed = v; }
+    }
+    return (idle > 0 || failed > 0) ? 'a' : 'g';
+  }
 ```
-Start a piece of **text** called `h` that will hold our HTML. This is the opening box.
+Match the label, keep the number. Then: *if either is above zero, return `'a'` (amber), otherwise `'g'` (green).* `||` means **or**.
 
 ```js
-for (var i = 0; i < rs.length; i++) {
+  function title() {
+    var all = document.querySelectorAll('*'), best = null;
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      if (n.textContent.trim().toLowerCase() !== 'needs attention') { continue; }
+      if (best === null || n.getElementsByTagName('*').length < best.getElementsByTagName('*').length) { best = n; }
+    }
+    return best;
+  }
 ```
-Repeat **once per item**. `i` counts `0, 1, 2...`; `i++` adds 1 each round; it stops when `i` reaches the size of the list.
+Find the heading to attach the icon to. `'*'` means **every element on the page**. We keep only those whose text is exactly "needs attention" - but a heading's whole ancestry technically "contains" that text too, so several elements match. `getElementsByTagName('*').length` counts how many elements are **inside** each candidate, and we keep the one with the **fewest**. That is the innermost, most specific element - the heading itself, not the panel wrapped around it.
 
 ```js
-  var r = rs[i];
+  function upd() {
+    var t = title(); if (!t) { return; }
+    var st = state();
 ```
-`r` is the **current item** - one vendor's data, e.g. `{Vendor:"AWS", Tenants:3, Clients:10, Jobs:55}`.
+The update step: find the heading, work out the colour. If the heading is not on screen (different page), quietly do nothing.
 
 ```js
-  h += '<div style="display:flex; ...">'
+    var ex = t.querySelector('.status-icon');
+    if (!ex) {
+      ex = document.createElement('span');
+      ex.className = 'status-icon';
+      ex.style.marginRight = '8px';
+      t.insertBefore(ex, t.firstChild);
+      ex.__st = '';
+    }
 ```
-`+=` means *"stick this onto the end of `h`"*. And `+` between two pieces of text **glues them together**. This opens one row.
+Is our icon holder already there? If not, **build one**: `createElement('span')` makes a new empty element, we tag it with a class and a little right margin, and `insertBefore(ex, t.firstChild)` puts it **before the heading's first child** - i.e. in front of the words. `ex.__st = ''` starts a note-to-self about the current colour.
 
 ```js
-     + '<svg ...><path d="M19.35 10.04A7.49 ..."/></svg>'
+    if (ex.__st !== st) { ex.innerHTML = (st === 'a') ? W : K; ex.__st = st; }
+  }
 ```
-The **cloud icon**. That long `d="..."` is just drawing instructions for the shape - there is nothing to read there.
+**Only touch the page if the colour actually changed.** `ex.__st` remembers what we drew last time. Without this check we would rewrite the icon every single second for no reason.
 
 ```js
-     + '<div style="font-weight:600;...">' + r.Vendor + '</div>'
+  setTimeout(upd, 200);
+  setInterval(upd, 1000);
 ```
-The **vendor name** in bold, e.g. `AWS`.
+`setTimeout(upd, 200)` runs `upd` **once**, 200ms from now - a quick first paint. `setInterval(upd, 1000)` runs it **again and again, every second** - that is what keeps it in sync forever after.
 
 ```js
-     + n(r.Tenants, 'tenant', 'tenants') + ', '
-     + n(r.Clients, 'client', 'clients') + ', '
-     + n(r.Jobs,    'job',    'jobs')
+return '<div ...>' + value + '<span class="dash-event-status">FAILED</span>...</div>';
 ```
-Builds the smaller grey line: `"3 tenants, 10 clients, 55 jobs"`.
+Finally, job 1: hand back this tile's own HTML - the red icon, the big `value`, and the label. The tool paints whatever string you return.
 
-```js
-     + '</div></div></div>';
-}
-return h + '</div>';
-```
-**Close** the boxes we opened, end the loop, then close the outer box and **hand the finished HTML back**.
+## Three traps worth knowing
 
-## The style bits, one line each
+**1. The icon must not add any text.** `title()` finds the heading by matching its text *exactly*. The icons are SVG shapes, which contribute no text, so the heading's text stays "needs attention" and keeps matching on the next tick. If you inject a text character instead (say `▲`), the heading's text becomes "▲Needs attention", `title()` stops matching, and the icon freezes after the first paint.
 
-- `display:flex; align-items:center; gap:10px` - put the icon and text side by side, lined up in the middle, 10px apart.
-- `flex:0 0 auto` on the icon - **never shrink** it.
-- `flex:1 1 auto; min-width:0` on the text - **take the remaining width**, and allow it to shrink so long text truncates instead of overflowing.
-- `border-bottom:1px solid #eee` - a thin divider line under each row.
+**2. Guard the timer, or they stack.** Without `window.__iconInit`, each re-run adds another `setInterval`. Ten re-runs = ten timers doing the same work.
+
+**3. Only write when something changed.** Repainting identical HTML every second is wasteful and can make the browser fight you (flicker, lost focus). The `ex.__st !== st` check keeps writes rare.
 
 ## Try it yourself
 
-Save this as `tile.js` and run `node tile.js`. It is the same recipe, with the styling stripped so you can see the logic:
+Save this as `demo.html` and open it in a browser. Click the buttons and watch the icon next to the heading flip **without any page reload** - that is the whole point.
 
-```js
-// The tool hands this in. Note: a numbered cabinet, not a list.
-var rows = {
-  "0": { Vendor: "AWS",   Tenants: 3, Clients: 10, Jobs: 55 },
-  "1": { Vendor: "Azure", Tenants: 1, Clients: 2,  Jobs: 8  }
-};
+```html
+<!doctype html>
+<meta charset="utf-8">
+<h3 id="heading">Needs attention</h3>
 
-function render(rows) {
-  // 1. cabinet -> real list
-  var rs = [];
-  if (rows) {
-    for (var k in rows) {
-      if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
-    }
-  }
+<div><span class="dash-status-number">0</span> <span class="dash-event-status">IDLE</span></div>
+<div><span class="dash-status-number">0</span> <span class="dash-event-status">FAILED</span></div>
 
-  // 2. biggest first
-  rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
+<button onclick="setNum(0, 9)">IDLE = 9</button>
+<button onclick="setNum(0, 0)">IDLE = 0</button>
+<button onclick="setNum(1, 3)">FAILED = 3</button>
+<button onclick="setNum(1, 0)">FAILED = 0</button>
 
-  // 3. grammar helper
-  function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
-
-  // 4. nothing to show?
-  if (!rs.length) { return '<div>No data in this time range</div>'; }
-
-  // 5. one line per item
-  var h = '<div>';
-  for (var i = 0; i < rs.length; i++) {
-    var r = rs[i];
-    h += '<div>'
-       + '<b>' + r.Vendor + '</b> - '
-       + n(r.Tenants, 'tenant', 'tenants') + ', '
-       + n(r.Clients, 'client', 'clients') + ', '
-       + n(r.Jobs,    'job',    'jobs')
-       + '</div>';
-  }
-  return h + '</div>';
+<script>
+function setNum(i, v) {
+  document.querySelectorAll('.dash-status-number')[i].textContent = v;
 }
 
-console.log(render(rows));
+(function () {
+  if (window.__iconInit) { return; }
+  window.__iconInit = true;
+
+  var W = '<svg width="18" height="18" viewBox="0 0 50 50"><polygon fill="#FFC219" points="25 0 0 50 50 50"/></svg>';
+  var K = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#4caf50"/></svg>';
+
+  function state() {
+    var idle = 0, failed = 0, ns = document.querySelectorAll('.dash-status-number');
+    for (var i = 0; i < ns.length; i++) {
+      var l = ns[i].parentElement.querySelector('.dash-event-status');
+      if (!l) { continue; }
+      var t = l.textContent.trim().toUpperCase();
+      var v = parseInt((ns[i].textContent || '').trim(), 10) || 0;
+      if (t === 'IDLE') { idle = v; } else if (t === 'FAILED') { failed = v; }
+    }
+    return (idle > 0 || failed > 0) ? 'a' : 'g';
+  }
+
+  function title() {
+    var all = document.querySelectorAll('*'), best = null;
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i];
+      if (n.textContent.trim().toLowerCase() !== 'needs attention') { continue; }
+      if (best === null || n.getElementsByTagName('*').length < best.getElementsByTagName('*').length) { best = n; }
+    }
+    return best;
+  }
+
+  function upd() {
+    var t = title(); if (!t) { return; }
+    var st = state();
+    var ex = t.querySelector('.status-icon');
+    if (!ex) {
+      ex = document.createElement('span');
+      ex.className = 'status-icon';
+      ex.style.marginRight = '8px';
+      t.insertBefore(ex, t.firstChild);
+      ex.__st = '';
+    }
+    if (ex.__st !== st) { ex.innerHTML = (st === 'a') ? W : K; ex.__st = st; }
+  }
+
+  setTimeout(upd, 200);
+  setInterval(upd, 1000);
+})();
+</script>
 ```
 
-## Three samples
+## What you should see
 
-**Sample 1 - normal data.** Using the `rows` above:
+| You click | Numbers on screen | Icon becomes |
+|---|---|---|
+| *(nothing - page load)* | IDLE 0, FAILED 0 | green, within a second |
+| `IDLE = 9` | IDLE 9, FAILED 0 | **amber** |
+| `IDLE = 0` | IDLE 0, FAILED 0 | back to **green** |
+| `FAILED = 3` | IDLE 0, FAILED 3 | **amber** (either one counts) |
 
-```html
-<div><div><b>AWS</b> - 3 tenants, 10 clients, 55 jobs</div><div><b>Azure</b> - 1 tenant, 2 clients, 8 jobs</div></div>
-```
+Note the second row is exactly the case that was broken before: only *idle* moved, yet the icon still updates - because the watcher reads the screen, not one tile's data.
 
-Two things to notice: **AWS is first** even though it was not first in the data (55 jobs beats 8, and we sorted biggest first). And Azure reads **"1 tenant"**, not "1 tenants" - that is the grammar helper doing its job.
+## Is polling every second not wasteful?
 
-**Sample 2 - a missing number.** Change one row to:
+It is one pass over the page's elements per second, comparing a couple of numbers, and it writes to the page only when the colour genuinely changes. On a dashboard that is nothing. It is also far simpler and more robust than trying to guess exactly when the tool decides to re-run each tile - which was the thing that broke in the first place.
 
-```js
-"1": { Vendor: "Azure", Tenants: 1, Clients: 2 }   // Jobs is missing
-```
-
-Output:
-
-```html
-<div><div><b>AWS</b> - 3 tenants, 10 clients, 55 jobs</div><div><b>Azure</b> - 1 tenant, 2 clients, 0 jobs</div></div>
-```
-
-It prints `0 jobs` instead of blowing up or printing "undefined jobs". That is what `v = v || 0` and `(b.Jobs || 0)` are protecting you from.
-
-**Sample 3 - no data at all.** Call `render({})`:
-
-```html
-<div>No data in this time range</div>
-```
-
-A friendly message instead of an empty box. Always handle this - people view dashboards with filters that legitimately match nothing.
-
-## Why the saved version looks like gibberish
-
-If you open the stored tile you will see things like `&lt;div&gt;` and `\"` everywhere. Nothing clever is going on: the HTML text is stored **inside another file** (XML or JSON) that already uses `<`, `>` and `"` for its own purposes. So those characters get written in a "safe" spelling to keep the outer file valid, and they turn back into real `<`, `>`, `"` when the tile runs.
-
-Do not try to read it in that form. Unescape it first, then it reads like normal code.
+If you want to be tidier, the same logic works inside a `MutationObserver` (which fires only when the numbers actually change), but the timer version is easier to read and hard to get wrong.
 
 ## Takeaways
 
-- `:=` means "run this as a program and show what it returns". That is what makes a tile react to filters.
-- The data you are handed is a **numbered cabinet, not a list**. Copy it into a list before you sort or loop. `rows.length` and `rows.sort()` will not work.
-- `x || 0` means "use x, or 0 if it is missing". Sprinkle it on any number you do maths with.
-- `v === 1 ? one : many` is just if/else in shorthand - use it so you never print "1 jobs".
-- Always return something for the **empty** case.
-- The tile is only building a long piece of text with `+` and `+=`, then handing it back. Nothing more.
-- Escaped `&lt;` and `\"` in the saved file is just encoding. Unescape first, then read.
+- A tile's `:=` snippet re-runs when **that tile's own value** changes - not whenever the page changes. Anything you derive from *another* tile will go stale.
+- The escape hatch: **read the rendered screen on a timer** instead of computing once from the data. It does not care which tile re-ran.
+- Always guard one-time setup with a flag like `window.__iconInit`, or your timers pile up.
+- Cache the last state (`ex.__st`) and only write to the page when it actually changes.
+- If you inject an icon into an element you find **by its text**, use an SVG so it adds no text - otherwise your own icon breaks the search next time round.
+- `x || 0`, `parseInt(x, 10) || 0`, and `a && b && c` are all just "use a sensible default instead of crashing".
