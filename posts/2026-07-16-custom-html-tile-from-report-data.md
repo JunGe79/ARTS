@@ -1,8 +1,8 @@
 # When a dashboard tile will not re-run: watch the screen instead
 
-**Question:** My reporting tool lets a dashboard tile return HTML from a small JavaScript snippet. My tile shows a "Failed" count, and it also paints a status icon (amber or green) next to a panel heading somewhere else on the page. The icon is right when the page loads, but if I change a filter it goes stale - it only fixes itself if I refresh the whole page. Why, and how do I fix it without a refresh?
+**Question:** My dashboard has a small status icon: amber if something is wrong, green if all is fine. It is correct when the page loads. But when I change a filter, the icon does not change. Only a full page refresh fixes it. Why?
 
-**Answer:** Because a tile's snippet **only re-runs when that tile's own number changes**. My "Failed" count was almost always 0, so when a filter changed and only the *other* number moved, my tile never re-ran and the icon kept its old colour. The fix is to stop computing the icon once, and instead install a small **watcher** that reads the numbers already on screen every second and repaints the icon when they change.
+**Answer:** My tile **only re-runs when its own number changes**. That number was almost always 0. So when the filter moved a *different* number, my tile never ran again, and the icon kept its old colour. The fix: stop working out the icon once. Instead run a small timer that reads the numbers **already on the screen** every second, and repaints the icon when they change.
 
 ## First: what `:=` means
 
