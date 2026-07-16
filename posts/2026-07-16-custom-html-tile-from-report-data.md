@@ -1,47 +1,143 @@
-# Rendering a custom HTML tile from report data with a `:=` expression
+# Reading a report tile's JavaScript, line by line
 
-**Question:** My reporting tool lets a dashboard tile return raw HTML from a small JavaScript expression. I have a dataset of rows and I want to draw one styled line per row (an icon, a bold title, and a "3 tenants, 10 clients, 55 jobs" summary). How does a tile like that actually work, and what are the traps?
+**Question:** My reporting tool lets a dashboard tile return raw HTML from a small JavaScript snippet. I am not a JavaScript person. Someone handed me a 20-line tile that draws "AWS - 3 tenants, 10 clients, 55 jobs" and I cannot read it. What does each line actually do?
 
-**Answer:** The tile is just a tiny function: take the rows the platform hands you, tidy them into a real array, sort them, then build up one big HTML string and return it. The platform paints whatever string you return. The traps are small but real — the rows often arrive as an *index-keyed object* rather than an array, you need an empty-state, and you need a singular/plural helper so you don't print "1 jobs".
+**Answer:** The whole thing is a tiny recipe: **take the data, turn it into a list, sort it, then glue together a long piece of HTML text and hand it back.** The tool paints whatever text you hand back. Below is every line in plain words, plus samples you can run.
 
-## The `:=` marker
+## First: what `:=` means
 
-Many report platforms let a tile's content be either **static HTML** or a **live expression**. A leading `:=` means "don't treat this as fixed text — run it as JavaScript and use whatever it returns as the HTML." Inside that expression you get the tile's data (here called `rows`). That's the only reason the tile can react to filters and time ranges: it recomputes every time the data changes.
+A tile's content can be one of two things:
 
-## The one gotcha that bites everyone: `rows` is not an array
+- **Fixed text** - always shows the same thing.
+- **A `:=` snippet** - the leading `:=` tells the tool: *"this is not fixed text. Run it as a program and show whatever it gives back."*
 
-You'd expect `rows` to be a normal array you can `.sort()` or loop with `.length`. It usually isn't — it's an **index-keyed object** that looks like this:
+That is the only reason the tile can react to filters and time ranges. It re-runs and rebuilds its HTML each time the data changes. Inside the snippet you are handed the tile's data in a variable called `rows`.
+
+## The big gotcha: the data is not a list
+
+You would expect `rows` to be a normal list. It is not. It arrives like a **numbered filing cabinet**:
 
 ```js
 rows = { "0": {...}, "1": {...}, "2": {...} };
 ```
 
-`rows.length` is `undefined` and `rows.sort` doesn't exist. So the first job is to copy it into a real array:
+It has drawers labelled `"0"`, `"1"`, `"2"` - but it is not a list. That means:
+
+- `rows.length` gives **nothing** (undefined)
+- `rows.sort(...)` **does not exist** and will error
+
+So the first job is always: open each drawer and copy the contents into a real list.
+
+## Line by line
 
 ```js
 var rs = [];
-if (rows) {
-  for (var k in rows) {
-    if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
-  }
-}
 ```
-
-`for...in` walks the keys (`"0"`, `"1"`, …); `hasOwnProperty` makes sure we only take the object's own entries and skip anything inherited. Now `rs` is a normal array.
-
-## A runnable example
-
-This is the whole idea in a form you can paste into a file and run with `node tile.js`:
+Make an empty **list** called `rs`. `[]` means "empty list".
 
 ```js
-// The platform would pass this in. Note: an index-keyed object, not an array.
+if (rows) {
+```
+"If we actually got data." A safety check, in case `rows` is missing.
+
+```js
+  for (var k in rows) {
+```
+Go through each **key** in the cabinet. `k` holds one key at a time: first `"0"`, then `"1"`, and so on.
+
+```js
+    if (Object.prototype.hasOwnProperty.call(rows, k)) { rs.push(rows[k]); }
+```
+"Is this drawer really one of `rows`' own?" (skips inherited junk). If yes: `rows[k]` is what is inside that drawer, and `.push(...)` **adds it to the end** of our list.
+
+After this, `rs` is a normal list and we can sort and loop it.
+
+```js
+rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
+```
+**Sort** the list. The little function compares two items, `a` and `b`. Returning `b - a` means **biggest first**. `b.Jobs || 0` reads as *"use `b.Jobs`, but if it is missing use 0"* - without that, a missing number breaks the maths and the order goes random.
+
+```js
+function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
+```
+A small **grammar helper**. It takes a number and two words:
+
+- `v = v || 0` - if the number is missing, treat it as 0.
+- `v === 1 ? one : many` - this is a shorthand for "if / else". It reads: *if `v` is exactly 1, use the singular word, otherwise use the plural.*
+
+So `n(1,'job','jobs')` gives `"1 job"`, and `n(5,'job','jobs')` gives `"5 jobs"`. Without it you print "1 jobs", which looks broken.
+
+```js
+if (!rs.length) {
+  return '<div style="padding:10px;color:#888;">No Auto Scale jobs in this time range</div>';
+}
+```
+`.length` is how many items are in the list. `!` means **not**. So: *"if the list is empty"* - hand back a grey message and **stop right here**. `return` exits immediately; nothing below runs.
+
+```js
+var h = '<div style="padding:4px 2px;">';
+```
+Start a piece of **text** called `h` that will hold our HTML. This is the opening box.
+
+```js
+for (var i = 0; i < rs.length; i++) {
+```
+Repeat **once per item**. `i` counts `0, 1, 2...`; `i++` adds 1 each round; it stops when `i` reaches the size of the list.
+
+```js
+  var r = rs[i];
+```
+`r` is the **current item** - one vendor's data, e.g. `{Vendor:"AWS", Tenants:3, Clients:10, Jobs:55}`.
+
+```js
+  h += '<div style="display:flex; ...">'
+```
+`+=` means *"stick this onto the end of `h`"*. And `+` between two pieces of text **glues them together**. This opens one row.
+
+```js
+     + '<svg ...><path d="M19.35 10.04A7.49 ..."/></svg>'
+```
+The **cloud icon**. That long `d="..."` is just drawing instructions for the shape - there is nothing to read there.
+
+```js
+     + '<div style="font-weight:600;...">' + r.Vendor + '</div>'
+```
+The **vendor name** in bold, e.g. `AWS`.
+
+```js
+     + n(r.Tenants, 'tenant', 'tenants') + ', '
+     + n(r.Clients, 'client', 'clients') + ', '
+     + n(r.Jobs,    'job',    'jobs')
+```
+Builds the smaller grey line: `"3 tenants, 10 clients, 55 jobs"`.
+
+```js
+     + '</div></div></div>';
+}
+return h + '</div>';
+```
+**Close** the boxes we opened, end the loop, then close the outer box and **hand the finished HTML back**.
+
+## The style bits, one line each
+
+- `display:flex; align-items:center; gap:10px` - put the icon and text side by side, lined up in the middle, 10px apart.
+- `flex:0 0 auto` on the icon - **never shrink** it.
+- `flex:1 1 auto; min-width:0` on the text - **take the remaining width**, and allow it to shrink so long text truncates instead of overflowing.
+- `border-bottom:1px solid #eee` - a thin divider line under each row.
+
+## Try it yourself
+
+Save this as `tile.js` and run `node tile.js`. It is the same recipe, with the styling stripped so you can see the logic:
+
+```js
+// The tool hands this in. Note: a numbered cabinet, not a list.
 var rows = {
   "0": { Vendor: "AWS",   Tenants: 3, Clients: 10, Jobs: 55 },
   "1": { Vendor: "Azure", Tenants: 1, Clients: 2,  Jobs: 8  }
 };
 
 function render(rows) {
-  // 1. object -> real array
+  // 1. cabinet -> real list
   var rs = [];
   if (rows) {
     for (var k in rows) {
@@ -49,16 +145,16 @@ function render(rows) {
     }
   }
 
-  // 2. busiest first (|| 0 guards against a missing number -> no NaN)
+  // 2. biggest first
   rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
 
-  // 3. singular/plural helper: n(1,'job','jobs') -> "1 job"
+  // 3. grammar helper
   function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
 
-  // 4. empty state
+  // 4. nothing to show?
   if (!rs.length) { return '<div>No data in this time range</div>'; }
 
-  // 5. build one line per row
+  // 5. one line per item
   var h = '<div>';
   for (var i = 0; i < rs.length; i++) {
     var r = rs[i];
@@ -75,31 +171,50 @@ function render(rows) {
 console.log(render(rows));
 ```
 
-Output:
+## Three samples
+
+**Sample 1 - normal data.** Using the `rows` above:
 
 ```html
 <div><div><b>AWS</b> - 3 tenants, 10 clients, 55 jobs</div><div><b>Azure</b> - 1 tenant, 2 clients, 8 jobs</div></div>
 ```
 
-AWS lands first because 55 > 8, and Azure reads "1 tenant" (singular) because the helper checks `v === 1`.
+Two things to notice: **AWS is first** even though it was not first in the data (55 jobs beats 8, and we sorted biggest first). And Azure reads **"1 tenant"**, not "1 tenants" - that is the grammar helper doing its job.
 
-## The parts, one at a time
+**Sample 2 - a missing number.** Change one row to:
 
-- **Sort, busiest first.** A comparator that returns `b - a` sorts high to low. Writing `(b.Jobs || 0)` treats a missing value as `0` so the subtraction never becomes `NaN` and scrambles the order.
-- **Singular vs plural.** `n(v, one, many)` picks the right word. Without it you get "1 clients", which looks broken.
-- **Empty state.** `if (!rs.length) return ...` shows a friendly message instead of an empty box. Always handle the no-data case — dashboards are viewed with filters that legitimately return nothing.
-- **Build a string, then return it.** `h` starts as an opening `<div>`, each loop `+=`'s one more row, and you close it at the end. The platform injects that string as the tile's markup.
+```js
+"1": { Vendor: "Azure", Tenants: 1, Clients: 2 }   // Jobs is missing
+```
 
-In the real tile each row also carries an inline SVG icon and fl: `flex:0 0 auto` on the icon so it never shrinks, and `flex:1 1 auto; min-width:0` on the text block so it takes the rest of the width and can truncate instead of overflowing.
+Output:
 
-## Why the stored version looks unreadable
+```html
+<div><div><b>AWS</b> - 3 tenants, 10 clients, 55 jobs</div><div><b>Azure</b> - 1 tenant, 2 clients, 0 jobs</div></div>
+```
 
-If you ever open the saved tile you'll see `&lt;`, `&gt;`, and `\"` everywhere. That's because the HTML string is stored *inside another document* (XML/JSON) that reserves `<`, `>`, and `"`. They get written in their escaped spelling so the outer file stays valid, and they turn back into real `<`, `>`, `"` at runtime. It reads as noise; unescape it before trying to understand it.
+It prints `0 jobs` instead of blowing up or printing "undefined jobs". That is what `v = v || 0` and `(b.Jobs || 0)` are protecting you from.
+
+**Sample 3 - no data at all.** Call `render({})`:
+
+```html
+<div>No data in this time range</div>
+```
+
+A friendly message instead of an empty box. Always handle this - people view dashboards with filters that legitimately match nothing.
+
+## Why the saved version looks like gibberish
+
+If you open the stored tile you will see things like `&lt;div&gt;` and `\"` everywhere. Nothing clever is going on: the HTML text is stored **inside another file** (XML or JSON) that already uses `<`, `>` and `"` for its own purposes. So those characters get written in a "safe" spelling to keep the outer file valid, and they turn back into real `<`, `>`, `"` when the tile runs.
+
+Do not try to read it in that form. Unescape it first, then it reads like normal code.
 
 ## Takeaways
 
-- `:=` means "run this as code and render what it returns" — that's what makes the tile data-driven.
-- Treat the incoming `rows` as an **index-keyed object**: copy it into an array before you `sort`/loop. `rows.length` and `.slice()` will not work.
-- Guard numbers with `|| 0`, add a singular/plural helper, and always render an empty state.
-- Build HTML by concatenating a string and returning it; keep an icon from shrinking with `flex:0 0 auto` and let text truncate with `min-width:0`.
-- Escaped `&lt;`/`\"` in the stored file is just encoding — unescape first, then read.
+- `:=` means "run this as a program and show what it returns". That is what makes a tile react to filters.
+- The data you are handed is a **numbered cabinet, not a list**. Copy it into a list before you sort or loop. `rows.length` and `rows.sort()` will not work.
+- `x || 0` means "use x, or 0 if it is missing". Sprinkle it on any number you do maths with.
+- `v === 1 ? one : many` is just if/else in shorthand - use it so you never print "1 jobs".
+- Always return something for the **empty** case.
+- The tile is only building a long piece of text with `+` and `+=`, then handing it back. Nothing more.
+- Escaped `&lt;` and `\"` in the saved file is just encoding. Unescape first, then read.
