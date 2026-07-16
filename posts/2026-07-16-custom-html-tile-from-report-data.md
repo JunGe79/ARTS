@@ -30,7 +30,7 @@ rs.sort(function (a, b) { return (b.Jobs || 0) - (a.Jobs || 0); });
 function n(v, one, many) { v = v || 0; return v + ' ' + (v === 1 ? one : many); }
 
 if (!rs.length) {
-  return '<div style="padding:10px;color:#888;">No Auto Scale jobs in this time range</div>';
+  return '<div style="padding:10px;color:#888;">No jobs in this time range</div>';
 }
 
 var h = '<div style="padding:4px 2px;">';
@@ -116,7 +116,7 @@ So `n(1,'job','jobs')` gives `"1 job"`, and `n(5,'job','jobs')` gives `"5 jobs"`
 
 ```js
 if (!rs.length) {
-  return '<div style="padding:10px;color:#888;">No Auto Scale jobs in this time range</div>';
+  return '<div style="padding:10px;color:#888;">No jobs in this time range</div>';
 }
 ```
 `.length` is how many items are in the list. `!` means **not**. So: *"if the list is empty"* - hand back a grey message and **stop right here**. `return` exits immediately; nothing below runs.
