@@ -98,12 +98,3 @@ MACHINE                                   YOUR CLOUD
 ```
 
 Notice step 1: there's still a **bootstrap** — some first-contact trust that proves the machine is really node X before you register its cert. Certificates don't remove that; they just make sure no *private* material is ever transmitted afterward.
-
-## Takeaways
-
-- An **app registration** is an identity for a program, living in a **tenant** (directory), not a subscription.
-- **Certificate beats client secret**: the private key never leaves the machine; only a *signature* is sent, and the cloud stores only public keys.
-- Auth is the OAuth2 **client-credentials** grant with a **JWT assertion** signed by the private key; Azure verifies with the registered cert and issues a token.
-- **The machine generates its own key pair** and keeps the private key — never have the cloud generate it and ship the private key down.
-- **The machine never registers itself.** A **central, privileged automation** creates the app registration (Graph, tenant plane) and grants RBAC (subscription plane) — keep that power in one audited place.
-- You still need a **bootstrap** trust for the very first cert registration; the certificate model doesn't eliminate it, it just stops secrets from crossing the wire.
