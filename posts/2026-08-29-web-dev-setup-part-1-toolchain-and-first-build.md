@@ -141,22 +141,58 @@ The frontend has no data of its own; it forwards API calls to a real backend. A 
 
 ```
 # where the backend lives
-baseUrl = https://backend.example.com/api/
+baseUrl            = https://backend.example.com/api/
+
+# make the app actually READ this file (see below)
+configFileOverride = true
 
 # dev-mode switches
-devMode        = true                     # take the local-dev code paths
-reviewAppMode  = true                     # treat this as a preview instance, not production
-disableSSO     = true                     # skip the auto-login handshake; use plain login
-forceHttps     = false                    # we only have a plain-HTTP port locally
-corsAllowlist  = http://localhost:3000    # let the dev server's page call the backend
+devMode            = true                     # take the local-dev code paths
+reviewAppMode      = true                     # treat this as a preview instance, not production
+disableSSO         = true                     # skip the auto-login handshake; use plain login
+forceHttps         = false                    # we only have a plain-HTTP port locally
+corsAllowlist      = http://localhost:3000    # let the dev server's page call the backend
 ```
 
 A few of these are worth understanding, because you'll meet them again:
 
 - **Point-at-the-backend (`baseUrl`)** — a local frontend forwards its API calls to a real backend server; this line chooses which one.
+- **`configFileOverride` — the "actually read my file" switch.** This is the one people miss. Normally the app *doesn't* trust this local file for most settings — it fetches the authoritative configuration from the backend and **overrides your file values with them.** So you can edit `baseUrl` all you like and nothing happens. `configFileOverride = true` flips that precedence: now **your local file wins**, and your hand-edited values actually take effect. Without it, the rest of the file is basically decorative.
 - **Dev / preview mode** — production builds enforce the full login/security machinery; the dev switches relax that so a local instance can boot and log in normally.
 - **Disable SSO** — many enterprise apps auto-log-you-in via a single-sign-on handshake when components are co-installed. Locally that handshake has nothing to talk to, so you turn it off and use a plain username/password login.
 - **CORS allowlist** — if you run the React app on a dev server (say `localhost:3000`) that calls a backend on a *different* address, the browser blocks it by default. The allowlist tells the backend, "trust pages coming from `localhost:3000`." (More on CORS in a later post — it's the single most common browser error you'll hit.)
+
+### Why "dev mode" is sometimes mandatory, not optional
+
+It's tempting to read `devMode = true` as just "turn on convenient dev behavior." Often it's more than that — it can be a **runtime-compatibility shim** without which the app won't even boot locally, and it's worth knowing the shape of this because you'll hit the class of problem again.
+
+Here's the trap. Your **local** server is usually a lightweight, bundled one — and it's frequently an **older version** than the full server the code is built against. Java's servlet API (the thing that handles requests and cookies) is versioned, and newer versions add new methods. If the code calls a method that only exists in the *newer* servlet version, it compiles fine (it was built against the new API) but at runtime on the *older* local server that method **doesn't exist** — and the JVM throws a `NoSuchMethodError` on the first request. The app looks dead.
+
+`devMode = true` exists partly to **skip those newer-only code paths** on the local server. A common example: code that stamps a tracking **cookie** using a brand-new cookie API — dev mode routes around it so the old local server never hits the missing method.
+
+Which is a good excuse to make sure you understand cookies, since they sit right at this seam.
+
+### Sidebar: what a cookie actually is
+
+A **cookie** is a small piece of text the site tells your browser to save, and the browser **sends it back automatically on every future request to that site.** That's the whole trick — HTTP has no memory of its own, so cookies are how a site "remembers" you between clicks.
+
+When you log in:
+
+1. You POST your username and password.
+2. The server verifies them and replies with `Set-Cookie: session=abc123…`.
+3. Your browser stores `session=abc123`.
+4. On every later request the browser adds `Cookie: session=abc123`; the server looks it up, sees "already authenticated," and lets you straight in — **no password re-sent.** That random value is a *session token*, not your password.
+
+Why you sometimes stay logged in after closing the browser, and sometimes don't:
+
+| Cookie type | Has an expiry? | Survives closing the browser? |
+|---|---|---|
+| **Session cookie** (`session=abc`) | No | **No** — deleted on browser close |
+| **Persistent cookie** (`session=abc; Max-Age=…`) | Yes | **Yes** — kept until the expiry date |
+
+So "I didn't have to log in again" means your browser **still held a valid, unexpired cookie** and sent it automatically — and it survived the close only because it was a *persistent* ("remember me") cookie. Two caveats: even a persistent cookie dies at its expiry, and the **server can still reject it** (idle timeout, logout elsewhere, a redeploy that cleared sessions) — in which case you're bounced to login even though the cookie is still sitting in your browser.
+
+That "tracking cookie" the dev-mode shim skips is exactly this machinery — a `Set-Cookie` the server tries to write on every request, using a cookie method the local server is too old to have.
 
 ## Takeaways
 
@@ -165,5 +201,7 @@ A few of these are worth understanding, because you'll meet them again:
 - Run the **root `yarn install`** — the top-level build script needs it, and it's the easy one to miss.
 - An **internal registry** causes first-build **checksum errors** — fix with a one-time checksum-update install; don't commit the lockfile change.
 - A local build **points at a real backend** via a config file, plus a few **dev-mode switches** (dev/preview mode, disable SSO, a CORS allowlist for the dev-server port).
+- Set the **"actually read my file" override** (`configFileOverride`) or the app ignores your edits and pulls config from the backend instead.
+- **Dev mode can be mandatory, not optional** — it skips newer-only code paths (e.g. a new cookie API) that would `NoSuchMethodError` on the older lightweight local server.
 
 Next up (**Part 2**): compiling the Java, running the whole thing on embedded Tomcat, and the two ways to run the frontend — the fast dev server vs. the full deployed build.
