@@ -59,14 +59,3 @@ Two phases. Provisioning happens once per tenant; the runtime path runs on every
 9. The client uploads its payload to blob storage.
 
 ![Certificate-based auth flow](../images/2026-09-04-cert-auth-flow.png)
-
-## Takeaways
-
-- An app registration has **two credential lists**: secrets (`passwordCredentials`) and
-  certs (`keyCredentials`) — both can hold multiple entries, all valid at once.
-- `keyCredentials` stores only the **public** cert; the private key stays on the client.
-  This is on by default for every app registration.
-- Adding your own cert to a shared app registration lets a second consumer authenticate
-  **without sharing anyone's secret**, and lets each consumer rotate independently.
-- Certificate (JWT client-assertion, RS256) auth is stronger than a shared secret because
-  the credential itself never travels — only a short-lived signed assertion does.
