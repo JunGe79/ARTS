@@ -151,13 +151,3 @@ This is the part worth remembering — the work splits by *privilege*:
 | 1 — create UAMI + federated creds | **You** (Contributor) | Contributor can create identities and federated credentials. |
 | 2 — role assignment | **An Owner / User Access Administrator** | Role assignments need elevated rights. |
 | 3 — annotate SAs + label pods | **The other team** | It's their cluster. They only need the `clientId`. |
-
-## Takeaways
-
-- **Workload identity means no shared secret** — the pods prove themselves with a cluster-signed JWT; you store nothing, rotate nothing, leak nothing.
-- A **federated credential** is just a trust rule matching three JWT claims: issuer (which cluster), subject (`system:serviceaccount:<ns>:<sa>`), and the fixed audience `api://AzureADTokenExchange`.
-- **One UAMI per access profile, not per service account** — same access → share the identity + one role assignment, with one federated credential per subject.
-- A federated credential is **authentication only**; it grants nothing until you add an RBAC role (`Storage Blob Data Reader` for read-only).
-- **Account scope** is the realistic choice when there are too many containers to enumerate — it's still read-only (writes `403`).
-- **blobfuse / the Blob CSI driver support workload identity too** — no account key, one container per mount, mount `-o ro`.
-- Work splits by privilege: **Contributor** makes the identity, an **Owner/UAA** grants the role, the **team** wires up their pods with just the `clientId`.
