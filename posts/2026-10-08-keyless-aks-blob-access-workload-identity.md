@@ -114,23 +114,7 @@ Ideally you'd scope `Storage Blob Data Reader` to just the containers they need.
 
 ## Phase 3 — the team wires it up on their side
 
-Hand the team the **`clientId`** from Phase 1. They:
+Hand the team the **`clientId`** from Phase 1. On their side:
 
-1. Annotate each **ServiceAccount** with the client id:
-   ```yaml
-   apiVersion: v1
-   kind: ServiceAccount
-   metadata:
-     name: team-app
-     namespace: team-app
-     annotations:
-       azure.workload.identity/client-id: <clientId-from-phase-1>
-   ```
-2. Label each **pod template** so the mutating webhook injects the token:
-   ```yaml
-   metadata:
-     labels:
-       azure.workload.identity/use: "true"
-   ```
-
-That label triggers Azure's webhook to inject the projected token file plus the env vars (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_AUTHORITY_HOST`) that `DefaultAzureCredential()` reads automatically. Their cluster also needs `--enable-oidc-issuer --enable-workload-identity` turned on — usually already done if they're using workload identity at all.
+- Cluster has `--enable-oidc-issuer --enable-workload-identity`.
+- Each **ServiceAccount** annotated `azure.workload.identity/client-id: <clientId>`; pod template labeled `azure.workload.identity/use: "true"`.
