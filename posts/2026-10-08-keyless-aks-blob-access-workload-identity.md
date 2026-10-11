@@ -134,10 +134,3 @@ Hand the team the **`clientId`** from Phase 1. They:
    ```
 
 That label triggers Azure's webhook to inject the projected token file plus the env vars (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_AUTHORITY_HOST`) that `DefaultAzureCredential()` reads automatically. Their cluster also needs `--enable-oidc-issuer --enable-workload-identity` turned on — usually already done if they're using workload identity at all.
-
-## Does blobfuse change anything?
-
-The team wanted to **mount** the blobs with blobfuse rather than call the SDK. Good news: **no change to the plan.** Modern blobfuse2 (v2.x) and the Azure Blob CSI driver both support workload identity natively — same keyless auth, no account key. The only client-side differences:
-
-- blobfuse mounts **one container per mount** (not the whole account), so account-scope Data Reader lets them mount any container they name.
-- Mount **read-only** (`-o ro`) to match the role.
