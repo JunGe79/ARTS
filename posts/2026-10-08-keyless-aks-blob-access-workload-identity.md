@@ -141,13 +141,3 @@ The team wanted to **mount** the blobs with blobfuse rather than call the SDK. G
 
 - blobfuse mounts **one container per mount** (not the whole account), so account-scope Data Reader lets them mount any container they name.
 - Mount **read-only** (`-o ro`) to match the role.
-
-## The division of labor (who runs what)
-
-This is the part worth remembering — the work splits by *privilege*:
-
-| Phase | Who | Why |
-|---|---|---|
-| 1 — create UAMI + federated creds | **You** (Contributor) | Contributor can create identities and federated credentials. |
-| 2 — role assignment | **An Owner / User Access Administrator** | Role assignments need elevated rights. |
-| 3 — annotate SAs + label pods | **The other team** | It's their cluster. They only need the `clientId`. |
