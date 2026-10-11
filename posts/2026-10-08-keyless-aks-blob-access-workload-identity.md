@@ -1,20 +1,8 @@
 # Keyless read-only blob access for someone else's AKS pods (Azure Workload Identity)
 
-**Question:** Another team runs pods in their own AKS cluster and needs **read-only** access to blob containers in *my* storage account. I don't want to hand them a storage account key or a client secret — anything I give them is a credential that leaks, gets committed, and never expires. How do I give their pods access to my blobs with **no shared secret at all**?
+**Question:** Another team runs pods in their own AKS cluster and needs **read-only** access to blob containers in *my* storage account. I don't want to hand them a storage account key or a client secret. How do I give their pods access to my blobs with **no shared secret at all**?
 
 **Answer:** Use **Azure AD Workload Identity**. Their cluster signs a short-lived OIDC token for each pod; you create **one user-assigned managed identity (UAMI)** and add **federated credentials** that tell Entra "trust tokens from *that* cluster for *these* service accounts." Then you grant the UAMI `Storage Blob Data Reader` on your account. Nothing secret ever changes hands — the pods prove who they are with a cluster-signed JWT, and Entra verifies it against the cluster's public keys.
-
-## The problem with the obvious answers
-
-Three tempting options, all bad:
-
-| Option | Why it's bad |
-|---|---|
-| Hand them a **storage account key** | Full read/write/delete on the *whole* account. Impossible to scope. Rotating it breaks everyone. |
-| Create an **app registration + client secret** | A real secret that lives in their cluster, gets committed to git, and expires (silently breaking them at 3am). |
-| **SAS token** | Expires (so you're minting new ones forever) or is long-lived (so it's a key again). |
-
-All three share one flaw: **a secret you both hold.** Workload identity removes the secret entirely.
 
 ## How workload identity works (the mental model)
 
