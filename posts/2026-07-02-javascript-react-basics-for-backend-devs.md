@@ -1,4 +1,4 @@
-# JavaScript & React Basics for Backend Developers
+# [JS] JavaScript & React Basics for Backend Developers
 
 **Question:** You can code, but JS/React isn't your daily language. What do `useMemo`, `async`/`await`, `===`, `Promise.all().flat()`, `styled.div`, and "controlled vs uncontrolled" actually mean?
 
