@@ -1,4 +1,4 @@
-# How to refresh one dashboard tile without reloading the page
+# [JS] How to refresh one dashboard tile without reloading the page
 
 **Question:** I change a filter, and one tile on my dashboard does not update. Only a full page refresh fixes it. How do I refresh just that tile, without reloading the page?
 
