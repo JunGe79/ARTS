@@ -91,4 +91,3 @@ Two more giveaways:
 
 - **Table Storage** — a lookup/config table next to your blobs, write-rarely/read-sometimes, cost-sensitive, single region, and you only ever query by key. This is the "it's basically free and good enough" choice.
 - **Cosmos Table API** — latency-sensitive hot path, queries on non-key fields, multi-region reads/writes, or a hard throughput SLA. You're buying guaranteed performance and rich indexing, and paying provisioned/serverless RU for it.
-- **Both, deliberately** — a perfectly reasonable pattern is an authoritative record in one store with a fallback copy in the other. Because the `TableClient` API is identical, your resolution code can try each source in turn with the same calls, differing only in the connection string and the trust order.
